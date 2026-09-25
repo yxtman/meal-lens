@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MealLens Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 780px;
+            margin: 32px auto;
+            padding: 0 16px;
+            background: #f7faf7;
+            color: #202020;
+        }
+        h1 { color: #256f3c; }
+        form, .result {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        label { display: block; margin-top: 12px; font-weight: bold; }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin-top: 4px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+        button {
+            margin-top: 18px;
+            padding: 10px 18px;
+            background: #256f3c;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .foods div { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+        .foods input { width: 100px; }
+        .result { margin-top: 20px; }
+        .result ul { padding-left: 20px; }
+    </style>
+</head>
+<body>
+<h1>MealLens 餐食分析 Demo</h1>
+<form id="analysis-form">
+    <label>性别
+        <select id="gender">
+            <option value="male">男</option>
+            <option value="female">女</option>
+        </select>
+    </label>
+    <label>年龄 <input type="number" id="age" value="21" min="1"></label>
+    <label>身高 cm <input type="number" id="height" value="175" min="1"></label>
+    <label>体重 kg <input type="number" id="weight" value="70" min="1"></label>
+    <label>目标
+        <select id="goal">
+            <option value="lose">减脂</option>
+            <option value="keep">保持</option>
+            <option value="gain">增肌</option>
+        </select>
+    </label>
+    <label>活动量
+        <select id="activity">
+            <option value="sedentary">久坐</option>
+            <option value="light" selected>轻度活动</option>
+            <option value="moderate">中度活动</option>
+            <option value="high">高强度</option>
+        </select>
+    </label>
+    <h3>选择这一餐的食物</h3>
+    <div class="foods" id="foods"></div>
+    <button type="submit">分析这一餐</button>
+</form>
+<div class="result" id="result" style="display: none;"></div>
+<script>
+    const foodsDiv = document.getElementById('foods');
+    let foods = [];
+
+    fetch('/api/foods')
+        .then(response => response.json())
+        .then(data => {
+            foods = data;
+            foods.forEach(food => {
+                const row = document.createElement('div');
+                row.innerHTML = `
+                    <input type="checkbox" id="food-${food.id}" value="${food.id}">
+                    <label for="food-${food.id}" style="margin:0;font-weight:normal;">
+                        ${food.name}（默认 ${food.defaultGrams}g）
+                    </label>
+                    <input type="number" id="grams-${food.id}" value="${food.defaultGrams}" min="1">
+                `;
+                foodsDiv.appendChild(row);
+            });
+        });
+
+    document.getElementById('analysis-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const selectedFoods = foods
+            .map(food => {
+                const checkbox = document.getElementById(`food-${food.id}`);
+                const gramsInput = document.getElementById(`grams-${food.id}`);
+                if (checkbox.checked && gramsInput.value) {
+                    return { foodId: food.id, grams: Number(gramsInput.value) };
+                }
+                return null;
+            })
+            .filter(item => item !== null);
+
+        const body = {
+            userProfile: {
+                gender: document.getElementById('gender').value,
+                age: Number(document.getElementById('age').value),
+                heightCm: Number(document.getElementById('height').value),
+                weightKg: Number(document.getElementById('weight').value),
+                goal: document.getElementById('goal').value,
+                activityLevel: document.getElementById('activity').value
+            },
+            foods: selectedFoods
+        };
+
+        const response = await fetch('/api/analysis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        const resultDiv = document.getElementById('result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+            <h2>这一餐分析</h2>
+            <p><strong>总热量：</strong>${result.mealKcal} kcal</p>
+            <p><strong>蛋白质：</strong>${result.protein} g</p>
+            <p><strong>碳水：</strong>${result.carb} g</p>
+            <p><strong>脂肪：</strong>${result.fat} g</p>
+            <p><strong>今日目标：</strong>${result.dailyTargetKcal} kcal</p>
+            <p><strong>剩余热量：</strong>${result.remainingKcal} kcal</p>
+            <p><strong>这一餐占今日目标：</strong>${result.percentOfDay}%</p>
+            <h3>食物明细</h3>
+            <ul>
+                ${result.foodReports.map(item => `<li>${item.name}：${item.grams}g，${item.kcal} kcal</li>`).join('')}
+            </ul>
+            <h3>建议</h3>
+            <ul>
+                ${result.suggestions.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+        `;
+    });
+</script>
+</body>
+</html>

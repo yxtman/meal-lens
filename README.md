@@ -13,7 +13,13 @@ MealLens 是一个“吃饭影响分析工具”。它不追求医学级精度�
 
 ## 当前阶段
 
-Phase 0：产品设计与技术方案确认。
+Phase 1：基础 Web Demo 已可本地运行。
+
+- Spring Boot 后端 + H2 内存数据库
+- 内置 14 种常见食物
+- 支持按身高、体重、年龄、性别、目标、活动量估算 BMR / TDEE
+- 输出总热量、蛋白质、碳水、脂肪、今日剩余热量和建议
+- 提供静态演示页面
 
 ## MVP 目标
 
@@ -40,11 +46,25 @@ meal-lens/
 ## 技术方案
 
 - 前端：先 Web，后 Flutter
-- 后端：Spring Boot 3
+- 后端：Spring Boot
 - 数据库：MySQL
 - 缓存：Redis
 - AI 服务：Python FastAPI + 图像识别模型
 - 部署：Docker Compose
+
+## 本地运行
+
+```bash
+cd backend
+./mvnw spring-boot:run
+```
+
+打开 <http://localhost:8080> 即可查看演示页面。
+
+## 当前接口
+
+- `GET /api/foods`：返回内置食物库
+- `POST /api/analysis`：根据用户资料和食物分量生成分析结果
 
 ## 后续计划
 
