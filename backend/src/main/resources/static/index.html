@@ -41,11 +41,36 @@
         .foods input { width: 100px; }
         .result { margin-top: 20px; }
         .result ul { padding-left: 20px; }
+        .camera { margin-bottom: 20px; }
+        .camera video,
+        .camera img {
+            width: 100%;
+            max-height: 320px;
+            border-radius: 8px;
+            background: #e8e8e8;
+        }
+        .camera-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .camera-actions button { margin-top: 10px; }
+        #photo-status { margin-top: 8px; color: #666; }
     </style>
 </head>
 <body>
 <h1>MealLens 餐食分析 Demo</h1>
 <form id="analysis-form">
+    <h3>拍摄这一餐</h3>
+    <div class="camera">
+        <video id="camera-preview" autoplay playsinline muted></video>
+        <img id="photo-preview" alt="拍摄的餐食照片" style="display: none;">
+        <div class="camera-actions">
+            <button type="button" id="start-camera">开启摄像头</button>
+            <button type="button" id="take-photo" disabled>拍照</button>
+            <button type="button" id="retake-photo" disabled>重拍</button>
+            <button type="button" id="choose-photo">从相册选择</button>
+            <input type="file" id="photo-file" accept="image/*" capture="environment" hidden>
+        </div>
+        <p id="photo-status">还没拍照。</p>
+    </div>
+
     <label>性别
         <select id="gender">
             <option value="male">男</option>
@@ -77,7 +102,85 @@
 <div class="result" id="result" style="display: none;"></div>
 <script>
     const foodsDiv = document.getElementById('foods');
+    const cameraPreview = document.getElementById('camera-preview');
+    const photoPreview = document.getElementById('photo-preview');
+    const startCameraButton = document.getElementById('start-camera');
+    const takePhotoButton = document.getElementById('take-photo');
+    const retakePhotoButton = document.getElementById('retake-photo');
+    const choosePhotoButton = document.getElementById('choose-photo');
+    const photoFileInput = document.getElementById('photo-file');
+    const photoStatus = document.getElementById('photo-status');
+
     let foods = [];
+    let photoDataUrl = null;
+    let cameraStream = null;
+
+    function stopCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        cameraPreview.style.display = 'none';
+        takePhotoButton.disabled = true;
+        startCameraButton.disabled = false;
+    }
+
+    async function startCamera() {
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' },
+                audio: false
+            });
+            cameraPreview.srcObject = cameraStream;
+            cameraPreview.style.display = 'block';
+            photoPreview.style.display = 'none';
+            photoStatus.textContent = '摄像头已开启，点击“拍照”。';
+            startCameraButton.disabled = true;
+            takePhotoButton.disabled = false;
+            retakePhotoButton.disabled = false;
+        } catch (error) {
+            photoStatus.textContent = '无法开启摄像头：' + error.message;
+        }
+    }
+
+    function takePhoto() {
+        const canvas = document.createElement('canvas');
+        canvas.width = cameraPreview.videoWidth;
+        canvas.height = cameraPreview.videoHeight;
+        canvas.getContext('2d').drawImage(cameraPreview, 0, 0);
+        photoDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        photoPreview.src = photoDataUrl;
+        photoPreview.style.display = 'block';
+        stopCamera();
+        photoStatus.textContent = '照片已拍摄，请在下方确认食物。';
+    }
+
+    function retakePhoto() {
+        photoDataUrl = null;
+        photoPreview.removeAttribute('src');
+        photoPreview.style.display = 'none';
+        photoStatus.textContent = '还没拍照。';
+        startCamera();
+    }
+
+    startCameraButton.addEventListener('click', startCamera);
+    takePhotoButton.addEventListener('click', takePhoto);
+    retakePhotoButton.addEventListener('click', retakePhoto);
+    choosePhotoButton.addEventListener('click', () => photoFileInput.click());
+    photoFileInput.addEventListener('change', event => {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            photoDataUrl = reader.result;
+            photoPreview.src = photoDataUrl;
+            photoPreview.style.display = 'block';
+            photoStatus.textContent = '照片已选择，请在下方确认食物。';
+        };
+        reader.readAsDataURL(file);
+    });
 
     fetch('/api/foods')
         .then(response => response.json())
@@ -131,6 +234,7 @@
         resultDiv.style.display = 'block';
         resultDiv.innerHTML = `
             <h2>这一餐分析</h2>
+            ${photoDataUrl ? `<img src="${photoDataUrl}" alt="餐食照片" style="width:100%;border-radius:8px;">` : ''}
             <p><strong>总热量：</strong>${result.mealKcal} kcal</p>
             <p><strong>蛋白质：</strong>${result.protein} g</p>
             <p><strong>碳水：</strong>${result.carb} g</p>
